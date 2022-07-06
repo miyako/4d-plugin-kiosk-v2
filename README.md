@@ -5,6 +5,44 @@
 
 # 4d-plugin-kiosk-v2
 
+#### Features
+
+#### macOS
+
+change `NSApplicationPresentationOptions`
+
+* NSApplicationPresentationHideMenuBar
+* NSApplicationPresentationHideDock
+* NSApplicationPresentationDisableAppleMenu
+* NSApplicationPresentationDisableProcessSwitching
+* NSApplicationPresentationDisableForceQuit
+* NSApplicationPresentationDisableSessionTermination
+* NSApplicationPresentationDisableHideApplication
+
+#### Windows
+
+filter certain key combinations
+
+* Ctrl+Esc
+* Alt+Tab, Alt+Shift+Tab
+* Alt+Esc, Alt+Shift+Esc
+* Ctrl+Shift+Esc
+* Alt+F4
+* Windows (left and right)
+
+Ctrl+Alt+Delete is not filtered
+
+set MDI window parameters
+
+* WS_POPUP
+
+remove MDI window parameters
+
+* WS_CAPTION
+* WS_SYSMENU
+
+hide task tray
+
 #### Syntax
 
 ```4d
