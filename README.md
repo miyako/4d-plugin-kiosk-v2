@@ -46,9 +46,3 @@ remove MDI window parameters
 hide task tray
 
 maximise MDI
-
-#### Syntax
-
-```4d
-
-```
