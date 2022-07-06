@@ -21,6 +21,47 @@ namespace KIOSK
 #endif
 }
 
+static bool wasMDI = true;
+
+#if VERSIONWIN
+
+static HWND getMDI() {
+
+	PA_ulong32 version = PA_Get4DVersion();
+
+	if (version >= 16)
+		return (HWND)PA_GetMainWindowHWND();
+
+	// Altura MAc2Win does not allow multiple instances of the same app
+	// we can assume that the window class is the folder name of the application
+
+	HWND mdi = NULL;
+	wchar_t path[_MAX_PATH] = { 0 };
+	wchar_t * applicationPath = wcscpy(path, (const wchar_t *)PA_GetApplicationFullPath().fString);
+
+	//remove file name (4D.exe)
+	PathRemoveFileSpec(path);
+	//check instance as well, to be sure
+	HINSTANCE h = (HINSTANCE)PA_Get4DHInstance();
+
+	do {
+		mdi = FindWindowEx(NULL, mdi, (LPCTSTR)path, NULL);
+		if (mdi)
+		{
+			if (h == (HINSTANCE)GetWindowLongPtr(mdi, GWLP_HINSTANCE))
+			{
+				break;
+			}
+		}
+	} while (mdi);
+
+	wasMDI = (mdi != NULL);
+
+	return mdi;
+}
+
+#endif
+
 #if VERSIONWIN
 LRESULT CALLBACK _CALLBACK_WH_KEYBOARD_LL(int code, WPARAM wParam, LPARAM lParam) {
     
@@ -46,7 +87,7 @@ LRESULT CALLBACK _CALLBACK_WH_KEYBOARD_LL(int code, WPARAM wParam, LPARAM lParam
             return 1;
         }
     }
-    return CallNextHookEx(hTaskMgr, code, wParam, lParam);
+    return CallNextHookEx(KIOSK::hTaskMgr, code, wParam, lParam);
 }
 #endif
 
@@ -105,7 +146,7 @@ static void showMainWindowTitleBar() {
                       | SWP_NOSIZE
                       | SWP_NOZORDER
                       | SWP_FRAMECHANGED);
-        ShowWindow(mdi, SW_RESTORE);
+        ShowWindow(hMDI, SW_RESTORE);
         UpdateWindow(GetDesktopWindow());
     }
 #endif
@@ -166,8 +207,6 @@ static void enableTaskSwitching() {
 
 #pragma mark -
 
-static bool wasMDI = true;
-
 static bool isSDI() {
     
 #if VERSIONWIN
@@ -196,45 +235,6 @@ static bool isSDI() {
     
     return !wasMDI;
 }
-
-#if VERSIONWIN
-
-static HWND getMDI() {
-    
-    PA_ulong32 version = PA_Get4DVersion();
-    
-    if (version >= 16)
-        return (HWND)PA_GetMainWindowHWND();
-    
-    // Altura MAc2Win does not allow multiple instances of the same app
-    // we can assume that the window class is the folder name of the application
-    
-    HWND mdi = NULL;
-    wchar_t path[_MAX_PATH] = { 0 };
-    wchar_t * applicationPath = wcscpy(path, (const wchar_t *)PA_GetApplicationFullPath().fString);
-    
-    //remove file name (4D.exe)
-    PathRemoveFileSpec(path);
-    //check instance as well, to be sure
-    HINSTANCE h = (HINSTANCE)PA_Get4DHInstance();
-    
-    do {
-        mdi = FindWindowEx(NULL, mdi, (LPCTSTR)path, NULL);
-        if (mdi)
-        {
-            if (h == (HINSTANCE)GetWindowLongPtr(mdi, GWLP_HINSTANCE))
-            {
-                break;
-            }
-        }
-    } while (mdi);
-    
-    wasMDI = (mdi != NULL);
-    
-    return mdi;
-}
-
-#endif
 
 static void OnExit() {
 #if VERSIONWIN

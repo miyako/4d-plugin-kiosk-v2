@@ -1,2 +1,2 @@
 //%attributes = {}
-KIOSK SET MODE(0)
+KIOSK SET MODE(1)
