@@ -19,6 +19,8 @@ change `NSApplicationPresentationOptions`
 * NSApplicationPresentationDisableSessionTermination
 * NSApplicationPresentationDisableHideApplication
 
+no window is set to full screen; do it manually.
+
 #### Windows
 
 filter certain key combinations
@@ -43,8 +45,4 @@ remove MDI window parameters
 
 hide task tray
 
-#### Syntax
-
-```4d
-
-```
+maximise MDI
