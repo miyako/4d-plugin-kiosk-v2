@@ -37,7 +37,16 @@ static HWND getMDI() {
 
 	HWND mdi = NULL;
 	wchar_t path[_MAX_PATH] = { 0 };
-	wchar_t * applicationPath = wcscpy(path, (const wchar_t *)PA_GetApplicationFullPath().fString);
+	const wchar_t *applicationPath = (const wchar_t *)PA_GetApplicationFullPath().fString;
+
+	//bounds-checked copy: PA_GetApplicationFullPath() is caller/OS-supplied and
+	//not guaranteed to fit in _MAX_PATH, so avoid an unbounded wcscpy here
+	if (wcsnlen(applicationPath, _MAX_PATH) < _MAX_PATH) {
+		wcscpy(path, applicationPath);
+	} else {
+		wcsncpy(path, applicationPath, _MAX_PATH - 1);
+		path[_MAX_PATH - 1] = L'\0';
+	}
 
 	//remove file name (4D.exe)
 	PathRemoveFileSpec(path);
@@ -165,9 +174,12 @@ static void disableTaskSwitching() {
     }
     
     if(KIOSK::hTaskMgr) {
-        if(RegOpenKey(HKCU, KEY_DisableTaskMgr, &hk) != ERROR_SUCCESS)
-            RegCreateKey(HKCU, KEY_DisableTaskMgr, &hk);
-        RegSetValueEx(hk, VAL_DisableTaskMgr, 0, REG_DWORD, (BYTE*)&val, sizeof(val));
+        bool haveKey = (RegOpenKey(HKCU, KEY_DisableTaskMgr, &hk) == ERROR_SUCCESS)
+                    || (RegCreateKey(HKCU, KEY_DisableTaskMgr, &hk) == ERROR_SUCCESS);
+        if(haveKey) {
+            RegSetValueEx(hk, VAL_DisableTaskMgr, 0, REG_DWORD, (BYTE*)&val, sizeof(val));
+            RegCloseKey(hk);
+        }
     }
 #else
     NSApplication *sharedApplication = [NSApplication sharedApplication];
@@ -194,9 +206,12 @@ static void enableTaskSwitching() {
     }
     
     if(!KIOSK::hTaskMgr) {
-        if(RegOpenKey(HKCU, KEY_DisableTaskMgr, &hk) != ERROR_SUCCESS)
-            RegCreateKey(HKCU, KEY_DisableTaskMgr, &hk);
-        RegDeleteValue(hk, VAL_DisableTaskMgr);
+        bool haveKey = (RegOpenKey(HKCU, KEY_DisableTaskMgr, &hk) == ERROR_SUCCESS)
+                    || (RegCreateKey(HKCU, KEY_DisableTaskMgr, &hk) == ERROR_SUCCESS);
+        if(haveKey) {
+            RegDeleteValue(hk, VAL_DisableTaskMgr);
+            RegCloseKey(hk);
+        }
     }
 #else
     NSApplication *sharedApplication = [NSApplication sharedApplication];
@@ -237,13 +252,16 @@ static bool isSDI() {
 }
 
 static void OnExit() {
-#if VERSIONWIN
+    //note: showTaskTray()/showMainWindowTitleBar() are Windows-only (no-ops on
+    //macOS since their bodies are gated on VERSIONWIN internally); this must not
+    //be gated on VERSIONWIN itself, or macOS never gets its presentationOptions
+    //restored via enableTaskSwitching() if the plugin unloads while still in
+    //kiosk mode
     if(KIOSK::mode == kiosk_mode_on) {
         showTaskTray();
         enableTaskSwitching();
         showMainWindowTitleBar();
     }
-#endif
 }
 
 void PluginMain(PA_long32 selector, PA_PluginParameters params) {
