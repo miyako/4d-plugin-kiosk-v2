@@ -14,6 +14,88 @@ KIOSK locks the current 4D session into a restricted "kiosk" desktop mode, and b
 
 **Platforms:** macOS (Intel & Apple Silicon), Windows 64-bit
 
+## Maintainer release workflow
+
+Run **Bump version** manually on the selected branch with `patch`, `minor`, or
+`major`. It validates the selected immutable commit and source metadata, creates
+one direct-child source-only commit, then pushes only that branch without force
+or tags. A mandatory executable pre-push guard checks the remote's advertised
+old SHA against the selected SHA, the new SHA against literal `HEAD`, the exact
+target ref, and the single parent. Missing/nonexecutable guards, dirty checkouts,
+branch movement (including deletion or an identical-result race), and additional
+updates fail closed. Bump never builds, tags, dispatches another workflow, or
+creates a release.
+
+Run **Build** separately using the Actions branch selector. It has **no inputs**;
+every checkout uses the dispatch's `github.sha`. Strict source `X.Y.Z` metadata
+determines `vX.Y.Z`, `kiosk-X.Y.Z.zip`, and `kiosk-X.Y.Z.dmg`. Build preserves the
+Windows x64 MSBuild pipeline (including its v143/Windows SDK 10.0 overrides),
+the universal arm64/x86_64 macOS pipeline, dependencies, resources, signing,
+verification, notarization, and DMG stapling. No platform/toolchain modernization
+is part of this migration.
+
+All branches share one non-cancelling publication concurrency group. Before
+native work and again after signing, both notarizations report `Accepted`, and
+stapling succeeds, Build checks the exact remote tag and every authenticated page
+of releases, including drafts. A collision, authentication error, HTTP 404,
+network failure, malformed response, or failed later page stops publication.
+Publication creates a new tag explicitly at the selected commit, verifies it
+remotely, creates a new public non-prerelease release with the original tag-based
+name and empty body, then uploads the ZIP and DMG only to that newly returned
+release ID. It never reuses, updates, deletes, clobbers, rolls back, or retries a
+publication.
+
+**Partial publication requires manual recovery.** If tag creation succeeds but
+release creation fails, that tag remains. If an upload fails, the new release and
+any uploaded assets remain. Inspect the failed run and remote tag/release/assets
+before deciding on a manual recovery; do not blindly rerun Build, since its
+collision checks deliberately refuse existing state. This workflow does not
+perform cleanup or repair of remote publication state.
+
+### Version authority and migration evidence
+
+The original `.github/workflows/bump-version.yml` header at `fd41655` explicitly
+coordinates `MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`, and existing plist
+short/build version fields. That explicit contract takes precedence over its
+buggy marketing-first implementation. Rename-follow history of the workflow,
+`kiosk.xcodeproj/project.pbxproj`, `Info.plist`, and
+`English.lproj/InfoPlist.strings` traces the source move at `fd41655` back to
+`50cba9b`/`f5ffac1`. Subsequent bumps `a33e090`, `1af8d58`, and `467d31d` changed
+marketing/plist display versions but left the six current-project versions and
+compiled English display metadata at `1.0.0`.
+
+The migration repairs only that proven drift to the existing **1.0.3** authority:
+six current-project values and the English short/get-info display versions.
+It does **not** increment the intake version. Xcode's actual inputs are
+`INFOPLIST_FILE = Info.plist` in three target configurations and the
+`English.lproj/InfoPlist.strings` Resources build phase; all six target/project
+version pairs participate. Optional `CFBundleVersion` remains absent in the
+source plist. Existing references, copyright text, file modes, CR-only localized
+line endings, and unrelated bytes remain intact. Prebuilt bundles, archives,
+dependencies, 4D data/schema, and unrelated counters are not version sources.
+
+Byte-preserving source edits validate all quoted/unquoted occurrences and
+supported references before writing any file. Native freshness checks invalidate
+only Mac products/compiled metadata/signatures, retaining committed resources
+and Windows products, require the exact MSBuild/artifact outputs rather than a
+recursive first match, and verify rebuilt display metadata against source.
+These are narrow publication-safety corrections, not native refactoring.
+
+The implementation adapts the full pinned helpers and tests from
+`miyako/4d-plugin-arguments@38a45cd0e30dc015ed430e8dd3c95c5c31f4a1fc`
+(coordinated six configurations and compiled localization),
+`miyako/4d-plugin-process@ec2611e6bbe97e87982cb84bb603462d0458612c`
+(coordinated authority),
+`miyako/4d-plugin-common-string-algorithm@2606a68201866ec9fcbb38b51462d79215f504ef`,
+and `miyako/4d-plugin-window-button@3f14facb9aaaaff0e22eeb8e07531163680c3a8a`
+(independent-build counterexamples and corrected advertised-SHA race coverage).
+Independent-build behavior is not imported into this coordinated project.
+
+Local checks use `actionlint` and
+`PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s .github/tests -v`.
+The Python tests use disposable source copies, bare Git remotes, API doubles,
+and closed-PATH native stubs; they do not build/sign/notarize or run 4D.
+
 ---
 
 ## Requirements & platform notes
