@@ -98,6 +98,65 @@ and closed-PATH native stubs; they do not build/sign/notarize or run 4D.
 
 ---
 
+## Native string ownership audit
+
+The audit baseline is `427ad8671ba6806c911077fbbdb44271525bcae5`.
+Both `manifest.json` and the tracked bundle's resource manifest expose only
+the two numeric commands above. `PluginMain` dispatches selectors 1 and 2;
+both Xcode and Visual Studio compile only `4DPlugin-kiosk.cpp` and
+`4D Plugin API/4DPluginAPI.c`. No exported text-array command exists.
+`&Y` in other plugin manifests would mean array-capable, not necessarily text.
+
+The tracked first-party helper inventory also includes
+`support/4DPlugin-JSON.{cpp,h}`, `ARRAY_TEXT`, `C_TEXT`, `C_BLOB`/`CBytes`,
+`C_LONGINT`, and `C_TYPES` under `4D Plugin API/Classes`. These are dormant
+in the current plugin targets. JsonCpp headers/static libraries and prebuilt
+bundles/archives are not first-party source audited or modified here.
+There is no `CPicture` or `C_POINTER` wrapper in this repository.
+
+The bundled SDK implementation labels itself `rev : v14`; its public header
+says `v13`. These are file revisions, not verified upstream SDK release IDs.
+Contracts were read from these exact bundled files, without rewriting them:
+
+| Surface | Ownership and disposition |
+|---|---|
+| `PA_CreateVariable(eVK_Unistring)` / `PA_SetStringVariable` | Creates an owned empty string, then shallow assignment can overwrite it. All four JSON string setter overloads now start Undefined, transfer their independently created value to the local variable, and clear it after property assignment. |
+| `PA_GetObjectProperty` | Explicitly returns a variable to clear. Scalar getters copy the string/Boolean/number before clearing; all five getters clear mismatches. Successful object/collection getters still hand the owning reference to the caller, who must dispose it. |
+| `ob_stringify` | Independently duplicates its object argument, clears that synchronous argument, copies the returned text, then clears the returned variable, including unexpected result types. |
+| `ARRAY_TEXT` | Copies borrowed input elements to independent C++ strings; creates independent SDK strings for output. Accepted SDK array assignments dispose the old element and transfer the new descriptor, so no post-insertion disposal was added. SDK index zero is accepted. |
+| `C_TEXT` / `CBytes` | Text is copied into C++ storage; output uses the engine-backed content setter, not descriptor-transfer array semantics. BLOB text conversions use these copies. No picture/charset byte-to-UTF-16-unit helper exists here. |
+| Native command code | The legacy Windows application-path descriptor has no explicit ownership comment in this SDK; cleanup is deferred rather than guessed. `isSDI` is uncalled, has numeric arguments, and ignores GET WINDOW RECT's result; no owning text result is established. |
+
+`PA_GetPointerValue` metadata/reference semantics and SDK-internal allocation
+failure behavior are not inferred safe or rewritten by this fix.
+In particular, the dormant array wrapper relies on successful engine allocation
+and resize; the regression does not certify its allocation-failure behavior.
+
+Run the narrow non-release regression on macOS with:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s .github/tests -p test_ownership.py -v
+```
+
+It compiles the actual JSON and array helper sources with the **full unchanged
+SDK**, simulating only its `Call4D` engine boundary. Real CoreFoundation performs
+the UTF conversions. Assertions cover exact ASCII/BMP/supplementary/empty
+contents and lengths, allocated/null empties, replacement, independent property
+results, mismatches, reference handoffs, stringify cleanup, borrowed array
+copies, independent output transfers, shrink/clear, and rejected type/index/
+null-data/null-input assignments. ASan/UBSan are enabled; explicit SDK string,
+handle, and reference accounting checks leaks because macOS LSan is unavailable.
+`KIOSK_OWNERSHIP_SOURCE` can select an extracted immutable source tree to run
+the same harness against the baseline. This is shim evidence, not execution
+inside 4D or reproduction of a Windows host crash.
+
+The ownership CI only runs that standalone test. It does not invoke Xcode
+project build phases, release workflows, signing, notarization, packaging,
+tags, or binary publication. In particular, do not use the project's
+`Deployment` configuration for this regression.
+
+---
+
 ## Requirements & platform notes
 
 - Both commands take **only** the parameters shown below — there's no optional form of either one.
